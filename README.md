@@ -1,56 +1,75 @@
-# Welcome to your Expo app 👋
+# 🍽️ Restaurant App MVP
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Restaurant App MVP — React Native + Expo | Fall 2026
 
-## Get started
+Restaurant App MVP is a frontend-only React Native restaurant application developed as a Mobile Application Development (MAD) assignment. The app provides separate Customer and Manager experiences with menu browsing, search, filtering, cart management, promo codes, ordering, order tracking, table reservations, profile/theme controls, and manager-side restaurant management.
 
-1. Install dependencies
+## 📖 About the Project
 
-   ```bash
-   npm install
-   ```
+This project demonstrates practical use of React components, navigation, React Hooks, Context API, reducer-based state management, local persistence, reusable custom hooks, theme switching, and role-based Customer/Manager navigation.
 
-2. Start the app
+The project is intentionally frontend-only. Application data is provided through local/mock data. No backend server, external database, payment gateway, or remote API is required to run the application.
 
-   ```bash
-   npx expo start
-   ```
+## ✨ Features
 
-In the output, you'll find options to open the app in a
+### 👤 Customer Features
+- Login and signup with role-based authentication
+- Menu browsing with categories (Starters, Mains, Desserts, Drinks)
+- Category filtering and debounced search
+- Menu item availability (unavailable items disabled)
+- Daily Special badges
+- Cart management (add/remove, adjust quantity, special instructions)
+- Promo code application (e.g. WELCOME10, FEAST20)
+- Order summary (subtotal, service charge, tax, discount, total)
+- Table reservation with live time-slot and table availability
+- Order tracking with live status updates
+- Light/Dark theme toggle
+- Logout
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### 👨‍💼 Manager Features
+- Manager-only dashboard (active orders, pending tables)
+- Order and reservation management
+- Accept/decline reservations
+- Add, edit, and toggle availability of menu items
+- Manager profile
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## 👤 Demo Accounts
 
-## Get a fresh project
+| Role | Email | Password |
+|------|-------|----------|
+| Customer | customer@demo.com | Pass1234 |
+| Manager | manager@demo.com | Manager123 |
 
-When you're ready, run:
+## 🛠️ Technology Stack
 
-```bash
-npm run reset-project
-```
+| Technology | Purpose |
+|---|---|
+| React Native | Cross-platform mobile UI |
+| Expo SDK 57 | Development runtime and tooling |
+| Expo Router | File-based navigation |
+| Context API | Shared application state |
+| React Hooks | Local state, effects, refs, context, optimization |
+| useReducer | Cart and order state transitions |
+| AsyncStorage | Local persistence |
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## 🧩 React Hooks Used
 
-### Other setup steps
+| Hook | Usage |
+|---|---|
+| useState | Forms, search, filters, modal visibility |
+| useEffect | Initialization, timers, AsyncStorage persistence |
+| useRef | Input focus, timers, scroll refs, render counter |
+| useContext | Auth, theme, cart, and orders state |
+| useReducer | Cart and order state management |
+| useMemo | Derived totals and filtered menu |
+| useCallback | Stable handlers for memoized components |
+| useForm | Reusable form validation logic |
+| useDebounce | Delayed search updates |
+| useReservation | Reservation availability and creation |
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## 🔐 Context API
 
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- **AuthContext** — current user and authentication
+- **ThemeContext** — light/dark theme and colors
+- **CartContext** — cart data and cart actions
+- **OrdersContext** — customer and manager order state
