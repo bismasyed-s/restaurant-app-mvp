@@ -1,0 +1,23 @@
+export const mockUsers = [
+  {
+    id: 1,
+    fullName: "Ahmed Khan",
+    email: "customer@restaurant.com",
+    password: "Password123",
+    role: "customer"
+  },
+  {
+    id: 2,
+    fullName: "Fatima Manager",
+    email: "manager@restaurant.com",
+    password: "Manager123",
+    role: "manager"
+  },
+  {
+    id: 3,
+    fullName: "Sara Ahmed",
+    email: "sara@restaurant.com",
+    password: "Sara1234",
+    role: "customer"
+  }
+];
