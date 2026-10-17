@@ -1,4 +1,5 @@
 import React from 'react';
+import { TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import LoginScreen from '../screens/LoginScreen';
 import MenuScreen from '../screens/MenuScreen';
@@ -8,8 +9,8 @@ import { lightColors } from '../theme/colors';
 const Stack = createNativeStackNavigator();
 
 /**
- * AppNavigator (Question 3 Stack Navigation)
- * Contains the LoginScreen and role-based destination screens (Menu and Dashboard).
+ * AppNavigator (Question 3 & 4 Stack Navigation)
+ * Links LoginScreen to MenuScreen (with dynamic item count title) and DashboardScreen.
  */
 export default function AppNavigator() {
   return (
@@ -36,19 +37,51 @@ export default function AppNavigator() {
       <Stack.Screen
         name="Menu"
         component={MenuScreen}
-        options={{
+        options={({ navigation }) => ({
           title: 'Menu',
           headerBackVisible: false,
-        }}
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Login')}
+              style={styles.headerButton}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.headerButtonText}>Logout</Text>
+            </TouchableOpacity>
+          ),
+        })}
       />
       <Stack.Screen
         name="Dashboard"
         component={DashboardScreen}
-        options={{
+        options={({ navigation }) => ({
           title: 'Manager Dashboard',
           headerBackVisible: false,
-        }}
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Login')}
+              style={styles.headerButton}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.headerButtonText}>Logout</Text>
+            </TouchableOpacity>
+          ),
+        })}
       />
     </Stack.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  headerButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  headerButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+});
