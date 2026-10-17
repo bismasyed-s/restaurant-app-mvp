@@ -1,0 +1,5 @@
+# Screenshots directory
+# Save Q3 screenshots here:
+# 1. q3-validation-errors.png (validation errors visible under inputs)
+# 2. q3-successful-login.png (successful login navigating to MenuScreen)
+# 3. q3-manager-login.png (optional/extra: manager login navigating to DashboardScreen)
