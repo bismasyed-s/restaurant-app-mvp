@@ -586,7 +586,7 @@ export default function MenuScreen({ navigation }) {
           onPress={handleBackToTop}
           activeOpacity={0.8}
         >
-          <Text style={styles.backToTopText}>↑</Text>
+          <Text style={styles.backToTopText}>↑ Back to top</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -737,10 +737,9 @@ const styles = StyleSheet.create({
   backToTopButton: {
     position: 'absolute',
     right: 20,
-    bottom: 28,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+	paddingHorizontal: 16,
+ 	height: 44,
+ 	borderRadius: 22,
     backgroundColor: lightColors.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -752,7 +751,7 @@ const styles = StyleSheet.create({
   },
   backToTopText: {
     color: '#FFFFFF',
-    fontSize: 22,
+    fontSize: 14,
     fontWeight: '700',
   },
 
