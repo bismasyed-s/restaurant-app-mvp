@@ -1,8 +1,56 @@
-# Restaurant App MVP (Frontend Only, React Native)
+# Restaurant App MVP (React Native and Express)
 
 A mobile restaurant management prototype built with React Native and Expo (SDK 57) for Mobile App Development, Fall 2026.
 
 ---
+
+## A2 Backend (Q2-Q7 server)
+
+The Express API is in the root `server/` folder. It uses MongoDB database `restaurant_app`.
+The app API address is set in one place, `src/api/client.js`, as `http://192.168.1.3:5000`. Change the IP when the laptop address changes; Android emulator uses `http://10.0.2.2:5000`.
+
+### Run the server
+
+1. In a terminal, run `cd server` and `npm install`.
+2. Copy `.env.example` to `.env`, then paste your MongoDB connection string into `MONGO_URI`. Keep `.env` private.
+3. Seed the database with `npm run seed`.
+4. Start the API with `npm run dev` (or `npm start`). It listens on `0.0.0.0:5000`.
+5. Open `http://<laptop-IP>:5000/api/health` from a phone on the same Wi-Fi. For Android emulator use `http://10.0.2.2:5000/api/health`.
+
+Seeded logins (password for both: `Pass1234`):
+
+| Role | Email |
+| --- | --- |
+| Customer | `customer@test.com` |
+| Manager | `manager@test.com` |
+
+### API endpoints
+
+Protected requests use `Authorization: Bearer <token>`. Manager endpoints require a manager token.
+
+| Method | Endpoint | Access | Request | Response |
+| --- | --- | --- | --- | --- |
+| GET | `/api/health` | Public | None | Status and server time |
+| POST | `/api/auth/register` | Public | Name, email, password, role | Token and public user; 409 for an existing email |
+| POST | `/api/auth/login` | Public | Email, password | One-day token and public user |
+| GET | `/api/auth/me` | Signed in | None | Current public user |
+| GET | `/api/menu` | Public | Optional category and search query | Matching menu items |
+| GET | `/api/menu/:id` | Public | None | One item; 400 invalid id, 404 missing item |
+| POST | `/api/menu` | Manager | Name, description, price, category, image, flags | Created item (201) |
+| PUT | `/api/menu/:id` | Manager | Menu fields to update | Updated item |
+| DELETE | `/api/menu/:id` | Manager | None | Delete message |
+| GET | `/api/tables` | Signed in | None | Tables and seat counts |
+| GET | `/api/reservations/availability` | Signed in | Date, timeSlot, partySize query | Free tables with enough seats |
+| POST | `/api/reservations` | Signed in | Table, date, timeSlot, partySize, phone | Created booking; 409 if taken |
+| GET | `/api/reservations/my` | Signed in | None | Current user's bookings |
+| GET | `/api/reservations` | Manager | None | All bookings |
+| PATCH | `/api/reservations/:id` | Owner or manager | Cancelled, Accepted, or Declined | Updated booking |
+| POST | `/api/orders` | Signed in | Item ids, quantities, notes, type, promo, table or pickup time | Order with server-calculated total |
+| GET | `/api/orders/my` | Signed in | None | Current user's orders |
+| GET | `/api/orders` | Manager | None | All orders |
+| PATCH | `/api/orders/:id/status` | Owner cancel or manager | Next status | Updated order |
+
+Use the exported `A2/restaurant-api.postman_collection.json` collection to exercise the routes, including authorization and validation failures.
 
 ## Installation & Setup
 
@@ -27,9 +75,9 @@ A mobile restaurant management prototype built with React Native and Expo (SDK 5
 
 ---
 
-## Mock Login Credentials
+## Seeded Login Credentials
 
-The app uses local client-side authentication (`src/data/users.js`) with no backend:
+The app authenticates with the server. Both seeded accounts use password `Pass1234`:
 
 | Role | Email | Password | Destination Screen |
 | :--- | :--- | :--- | :--- |
@@ -85,29 +133,52 @@ Keep straightforward values and handlers simple until repeated work is measurabl
 
 ## Q10 demo recording
 
-Demo video URL (maximum three minutes): Pending recording; paste the share link here after recording the customer and manager flow.
+**A1 demo video (maximum three minutes):** `[Add the A1 customer and manager flow recording link here]`
+
+## A2 two-device demo recording
+
+**A2 video (maximum four minutes):** `[Add the customer and manager order and reservation recording link here]`
+
+## Q9 custom hooks
+
+`useForm` keeps form values and field errors together. `useDebounce` waits until typing pauses before filtering. `useReservation` keeps booking fields, checks server availability, validates the booking, and sends create or cancel requests.
+
+## A2 app data
+
+The app reads menu items, tables, orders, and reservations from the API. AsyncStorage keeps only the login token and public user profile so the session can be restored after closing the app.
 
 ## Hook map
 
 | Hook or feature | Used in |
 | --- | --- |
 | `useState` | Login, Menu, Cart, Reservation, Profile, Manager Dashboard |
-| `useEffect` | Menu loading and cleanup, persisted `OrdersProvider` data, Order Tracking timers |
-| `useRef` | Menu search input, debounce timer, FlatList, previous query, render counter |
+| `useEffect` | Login restore, API loading, reservation availability, Order Tracking polling and elapsed time |
+| `useRef` | Menu search input, FlatList, previous query, render counter; request cleanup in `useApi` |
 | `useContext` through custom hooks | `useAuth`, `useTheme`, `useCart`, and `useOrders` across screens |
 | `useReducer` | CartProvider and OrdersProvider |
 | `useMemo` | Menu derived list, theme styles, Cart and Order Summary calculations, dashboard styles |
-| `useCallback` and `React.memo` | Menu handlers and `MenuItemCard` |
+| `useCallback` and `React.memo` | API requests, menu handlers, and `MenuItemCard` |
+| Custom hooks | `useForm` on Login/Signup, `useDebounce` on Menu, `useReservation` on Reservations, `useApi` on Menu/Dashboard/Cart |
 
 ## Screenshots Directory
 
-Current screenshots in `screenshots/`:
+Current A1 screenshots in `screenshots/`:
 - `q3-validation-errors.jpeg`
 - `q3-successful-customer-login.jpeg`
 - `q3-manager-login.jpeg`
 - `q5-render-counter.jpeg`
 
-Q8 console comparisons and the Q10 demo recording still need to be captured from a running app and added here.
+Pending evidence (capture and add links or filenames after testing):
+
+- A1 Q8: before/after MenuItemCard render comparison.
+- A1 Q9: a disabled reservation time slot.
+- A1 Q10: the A1 demo recording linked above.
+- A2 Q2: health route screenshot from Postman and the phone browser.
+- A2 Q3: the `menuitems` collection in Atlas or Compass.
+- A2 Q4: one successful and one failed Postman menu request.
+- A2 Q5: add-menu-item responses for 401, 403, and 201.
+- A2 Q6: both devices showing the same manager-updated price.
+- A2 Q7: the two-device order and reservation video linked above.
 
 ## GitHub handoff
 
