@@ -38,7 +38,7 @@ The app uses local client-side authentication (`src/data/users.js`) with no back
 
 ---
 
-## Question 4: Viva / Concept Note
+## Q4 note
 
 ### What happens if the filtering effect dependency array is left empty?
 

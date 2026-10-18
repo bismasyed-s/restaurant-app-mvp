@@ -501,6 +501,7 @@ export default function MenuScreen({ navigation }) {
           )}
         </View>
 
+        {/* Changing this ref does not re-render; changing state does. */}
         {/* Q5: render counter (debug label). It reads the ref value. */}
         <Text style={styles.renderCounter}>Renders: {renderCountRef.current}</Text>
 
