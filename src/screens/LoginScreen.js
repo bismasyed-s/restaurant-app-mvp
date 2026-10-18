@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,204 +13,73 @@ import {
 } from 'react-native';
 import useAuth from '../hooks/useAuth';
 import useTheme from '../hooks/useTheme';
+import useForm from '../hooks/useForm';
+import { apiRequest } from '../api/client';
+
+const EMPTY_FORM = { fullName: '', email: '', password: '', confirmPassword: '', role: 'customer' };
 
 /**
  * LoginScreen
- * Handles both Login and Signup functionality using useState only (no context or external state library).
- * Features controlled inputs, field-level validation, simulated network delay, and role-based navigation.
+ * Handles login and signup with the shared form hook and server API.
  */
 export default function LoginScreen() {
-  // This hook provides shared accounts and saves a successfully authenticated user.
-  const { login, users, registerUser } = useAuth();
+  // This hook stores the server token and public profile after authentication.
+  const { login } = useAuth();
   // This hook supplies the active palette so login colors follow the global theme.
   const { colors } = useTheme();
   // This memo rebuilds styles only when the active color palette changes.
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  // HOOK 1: useState for mode
-  // What it does: Tracks whether the user is on the 'login' screen or 'signup' screen.
-  // Why it is used: Allows toggling between Login and Signup forms within a single screen component.
-  const [mode, setMode] = useState('login'); // 'login' | 'signup'
-
-  // HOOK 2: useState for email
-  // What it does: Stores the current text value of the email input field.
-  // Why it is used: React Native uses controlled components, so input values are driven by state.
-  const [email, setEmail] = useState('');
-
-  // HOOK 3: useState for password
-  // What it does: Stores the current text value of the password input field.
-  // Why it is used: Keeps the password in state for validation checks and credential matching.
-  const [password, setPassword] = useState('');
-
-  // HOOK 4: useState for fullName
-  // What it does: Stores the user's full name during the signup process.
-  // Why it is used: Required only for new account registration in signup mode.
-  const [fullName, setFullName] = useState('');
-
-  // HOOK 5: useState for confirmPassword
-  // What it does: Stores the repeated password to confirm there are no typos during signup.
-  // Why it is used: Ensures password confirmation matches before allowing account creation.
-  const [confirmPassword, setConfirmPassword] = useState('');
-
-  // HOOK 6: useState for role
-  // What it does: Stores the selected user role ('customer' or 'manager').
-  // Why it is used: The assignment requires role selection on signup to determine access permissions.
-  const [role, setRole] = useState('customer'); // 'customer' | 'manager'
-
-  // HOOK 7: useState for errors object
-  // What it does: Stores validation error messages for each field (e.g., { email: '...', password: '...' }).
-  // Why it is used: Allows displaying inline error messages under specific fields and clearing them individually when edited.
-  const [errors, setErrors] = useState({});
-
-  // HOOK 8: useState for showPassword toggle
-  // What it does: Boolean flag (true/false) indicating if the password should be shown as plain text or masked.
-  // Why it is used: Enhances usability by letting users inspect their password before submitting.
+  // This state switches between the two authentication forms.
+  const [mode, setMode] = useState('login');
+  // This state shows or hides the password fields.
   const [showPassword, setShowPassword] = useState(false);
-
-  // HOOK 9: useState for isSubmitting flag
-  // What it does: Tracks whether an authentication request is currently in progress.
-  // Why it is used: Disables the submit button and displays an ActivityIndicator to prevent duplicate submissions.
+  // This state disables another submit while the server is responding.
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-
-  /**
-   * Helper function to clear field error as soon as the user starts editing that field.
-   * Requirement: "Errors for a field must clear as soon as the user edits that field."
-   */
-  const handleFieldChange = (field, value, setter) => {
-    setter(value);
-    if (errors[field]) {
-      setErrors((prevErrors) => {
-        const updatedErrors = { ...prevErrors };
-        delete updatedErrors[field];
-        return updatedErrors;
-      });
-    }
-  };
-
-  /**
-   * Validates form fields on submit.
-   * Rules:
-   * 1. Valid email format (e.g., user@domain.com)
-   * 2. Password has at least 8 characters and contains at least one digit
-   * 3. In signup mode: Full name is required, and password matches confirmPassword
-   */
-  const validateForm = () => {
-    const newErrors = {};
-
-    // Email validation
+  // This callback keeps the original A1 validation rules in one reusable function.
+  const validateForm = useCallback((values) => {
+    const nextErrors = {};
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!emailRegex.test(email.trim())) {
-      newErrors.email = 'Please enter a valid email address';
-    }
-
-    // Password validation: minimum 8 characters and at least one digit
-    const hasDigit = /\d/.test(password);
-    if (!password) {
-      newErrors.password = 'Password is required';
-    } else if (password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters long';
-    } else if (!hasDigit) {
-      newErrors.password = 'Password must contain at least one digit (0-9)';
-    }
-
-    // Signup-specific validations
+    if (!values.email.trim()) nextErrors.email = 'Email is required';
+    else if (!emailRegex.test(values.email.trim())) nextErrors.email = 'Please enter a valid email address';
+    if (!values.password) nextErrors.password = 'Password is required';
+    else if (values.password.length < 8) nextErrors.password = 'Password must be at least 8 characters long';
+    else if (!/\d/.test(values.password)) nextErrors.password = 'Password must contain at least one digit (0-9)';
     if (mode === 'signup') {
-      if (!fullName.trim()) {
-        newErrors.fullName = 'Full name is required';
-      }
-
-      if (!confirmPassword) {
-        newErrors.confirmPassword = 'Please confirm your password';
-      } else if (password !== confirmPassword) {
-        newErrors.confirmPassword = 'Passwords do not match';
-      }
+      if (!values.fullName.trim()) nextErrors.fullName = 'Full name is required';
+      if (!values.confirmPassword) nextErrors.confirmPassword = 'Please confirm your password';
+      else if (values.password !== values.confirmPassword) nextErrors.confirmPassword = 'Passwords do not match';
     }
+    return nextErrors;
+  }, [mode]);
+  // This custom hook manages field values, validation messages, and form reset.
+  const { values, errors, handleChange, handleSubmit: validateAndSubmit, reset } = useForm(EMPTY_FORM, validateForm);
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  /**
-   * Handles Form Submission (Login or Signup)
-   * Simulates network delay with a 1-second setTimeout.
-   * Stores the authenticated user so the navigator can open the correct role-based tabs.
-   * Shows an Alert on failure.
-   */
-  const handleSubmit = () => {
-    const isValid = validateForm();
-    if (!isValid) {
-      return;
-    }
-
+  // This submit callback sends the validated form to the matching server endpoint.
+  const handleSubmit = validateAndSubmit(async (formValues) => {
     setIsSubmitting(true);
-
-    // Simulate network delay of 1 second as required by the assignment
-    setTimeout(() => {
+    try {
+      const result = await apiRequest(mode === 'login' ? '/api/auth/login' : '/api/auth/register', {
+        method: 'POST',
+        body: mode === 'login'
+          ? { email: formValues.email.trim(), password: formValues.password }
+          : { name: formValues.fullName.trim(), email: formValues.email.trim(), password: formValues.password, role: formValues.role },
+      });
+      const user = { ...result.user, id: result.user._id, fullName: result.user.name };
+      await login(result.token, user);
+      reset();
+    } catch (error) {
+      Alert.alert(mode === 'login' ? 'Login Failed' : 'Signup Failed', error.message);
+    } finally {
       setIsSubmitting(false);
+    }
+  });
 
-      if (mode === 'login') {
-        // Authenticate against users array
-        const cleanEmail = email.trim().toLowerCase();
-        const foundUser = users.find(
-          (u) => u.email.toLowerCase() === cleanEmail && u.password === password
-        );
-
-        if (foundUser) {
-          // Store the signed-in user; the navigator opens the correct role-based tabs.
-          login(foundUser);
-        } else {
-          Alert.alert(
-            'Login Failed',
-            'Invalid email or password. Please check your credentials and try again.'
-          );
-        }
-      } else {
-        // Signup Mode
-        const cleanEmail = email.trim().toLowerCase();
-        const userExists = users.some((u) => u.email.toLowerCase() === cleanEmail);
-
-        if (userExists) {
-          Alert.alert('Signup Failed', 'An account with this email already exists.');
-          return;
-        }
-
-        const newUser = {
-          id: `u_${Date.now()}`,
-          fullName: fullName.trim(),
-          email: cleanEmail,
-          password: password,
-          role: role,
-        };
-
-        // Append new user to local state array
-        registerUser(newUser);
-
-        Alert.alert(
-          'Signup Successful',
-          `Account created for ${newUser.fullName} (${newUser.role}). Navigating to your home screen...`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                login(newUser);
-              },
-            },
-          ]
-        );
-      }
-    }, 1000);
-  };
-
-  /**
-   * Switch between Login and Signup modes
-   */
+  // This function changes form mode and clears stale values and validation messages.
   const switchMode = (newMode) => {
     setMode(newMode);
-    setErrors({});
+    reset();
   };
-
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -267,8 +136,8 @@ export default function LoginScreen() {
                 style={[styles.input, errors.fullName && styles.inputError]}
                 placeholder="e.g. John Doe"
                 placeholderTextColor={colors.textMuted}
-                value={fullName}
-                onChangeText={(text) => handleFieldChange('fullName', text, setFullName)}
+                value={values.fullName}
+                onChangeText={(text) => handleChange('fullName', text)}
                 editable={!isSubmitting}
                 autoCapitalize="words"
               />
@@ -285,8 +154,8 @@ export default function LoginScreen() {
               style={[styles.input, errors.email && styles.inputError]}
               placeholder="e.g. customer@test.com"
               placeholderTextColor={colors.textMuted}
-              value={email}
-              onChangeText={(text) => handleFieldChange('email', text, setEmail)}
+              value={values.email}
+              onChangeText={(text) => handleChange('email', text)}
               editable={!isSubmitting}
               keyboardType="email-address"
               autoCapitalize="none"
@@ -312,8 +181,8 @@ export default function LoginScreen() {
               style={[styles.input, errors.password && styles.inputError]}
               placeholder="Min 8 characters with 1 digit"
               placeholderTextColor={colors.textMuted}
-              value={password}
-              onChangeText={(text) => handleFieldChange('password', text, setPassword)}
+              value={values.password}
+              onChangeText={(text) => handleChange('password', text)}
               editable={!isSubmitting}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
@@ -331,9 +200,9 @@ export default function LoginScreen() {
                 style={[styles.input, errors.confirmPassword && styles.inputError]}
                 placeholder="Re-enter your password"
                 placeholderTextColor={colors.textMuted}
-                value={confirmPassword}
+                value={values.confirmPassword}
                 onChangeText={(text) =>
-                  handleFieldChange('confirmPassword', text, setConfirmPassword)
+                  handleChange('confirmPassword', text)
                 }
                 editable={!isSubmitting}
                 secureTextEntry={!showPassword}
@@ -353,15 +222,15 @@ export default function LoginScreen() {
                 <TouchableOpacity
                   style={[
                     styles.roleOption,
-                    role === 'customer' && styles.roleOptionSelected,
+                    values.role === 'customer' && styles.roleOptionSelected,
                   ]}
-                  onPress={() => setRole('customer')}
+                  onPress={() => handleChange('role', 'customer')}
                   disabled={isSubmitting}
                 >
                   <Text
                     style={[
                       styles.roleOptionText,
-                      role === 'customer' && styles.roleOptionTextSelected,
+                      values.role === 'customer' && styles.roleOptionTextSelected,
                     ]}
                   >
                     Customer
@@ -371,15 +240,15 @@ export default function LoginScreen() {
                 <TouchableOpacity
                   style={[
                     styles.roleOption,
-                    role === 'manager' && styles.roleOptionSelected,
+                    values.role === 'manager' && styles.roleOptionSelected,
                   ]}
-                  onPress={() => setRole('manager')}
+                  onPress={() => handleChange('role', 'manager')}
                   disabled={isSubmitting}
                 >
                   <Text
                     style={[
                       styles.roleOptionText,
-                      role === 'manager' && styles.roleOptionTextSelected,
+                      values.role === 'manager' && styles.roleOptionTextSelected,
                     ]}
                   >
                     Manager
@@ -413,12 +282,12 @@ export default function LoginScreen() {
           {/* Mock Credentials Quick Info Helper */}
           {mode === 'login' && (
             <View style={styles.quickInfoBox}>
-              <Text style={styles.quickInfoTitle}>Mock Login Accounts:</Text>
+              <Text style={styles.quickInfoTitle}>Seeded Server Accounts:</Text>
               <Text style={styles.quickInfoText}>
-                • Customer: <Text style={styles.bold}>customer@test.com</Text> / Pass1234
+                â€¢ Customer: <Text style={styles.bold}>customer@test.com</Text> / Pass1234
               </Text>
               <Text style={styles.quickInfoText}>
-                • Manager: <Text style={styles.bold}>manager@test.com</Text> / Pass1234
+                â€¢ Manager: <Text style={styles.bold}>manager@test.com</Text> / Pass1234
               </Text>
             </View>
           )}

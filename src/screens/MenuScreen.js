@@ -11,27 +11,31 @@ import {
   Alert,
   TextInput,
 } from 'react-native';
-import { fetchMenuData, CATEGORIES } from '../data/menu';
 import useTheme from '../hooks/useTheme';
 import useCart from '../hooks/useCart';
-import useOrders from '../hooks/useOrders';
+import useApi from '../hooks/useApi';
+import useDebounce from '../hooks/useDebounce';
+import { apiRequest } from '../api/client';
 import MenuItemCard from '../components/MenuItemCard';
+
+const CATEGORIES = ['All', 'Starters', 'Mains', 'Desserts', 'Drinks'];
 
 /**
  * MenuScreen (Question 4 + Question 5)
  *
- * Q4: loading with useEffect, category filtering, FlatList, header count.
- * Q5: search bar (useRef on TextInput), 400 ms debounce (useRef for the timer),
- *     FlatList ref + back-to-top button, render counter (useRef), recent searches.
+ * Q4-Q5: loads the live menu, filters and searches it, and keeps the A1 list controls.
  */
 export default function MenuScreen({ navigation }) {
   // This hook provides the active palette so menu colors follow the global theme.
   const { colors } = useTheme();
   // This hook dispatches selected menu items into the shared cart.
   const { dispatch } = useCart();
-  // This hook keeps manager menu edits in sync with the customer menu.
-  const { state: ordersState } = useOrders();
-  const menuItems = ordersState.menuItems;
+  // This callback defines the server request used by the API hook.
+  const fetchMenu = useCallback(() => apiRequest('/api/menu'), []);
+  // This hook loads server data and provides retry behavior for this screen.
+  const { data: menuResponse, loading: isLoading, error, refetch } = useApi(fetchMenu, { initialData: [] });
+  // This memo gives each server item the id name used by the existing menu cards and cart.
+  const menuItems = useMemo(() => (menuResponse || []).map((item) => ({ ...item, id: item._id })), [menuResponse]);
   // This memo rebuilds styles only when the active color palette changes.
   const styles = useMemo(() => makeStyles(colors), [colors]);
   // =========================================================================
@@ -49,19 +53,7 @@ export default function MenuScreen({ navigation }) {
   // This state holds favourite ids so the tapped heart updates and the other cards can stay memoized.
   const [favoriteIds, setFavoriteIds] = useState([]);
 
-  // HOOK 4: useState for isLoading
-  // What it does: True while the 1.5 second fake fetch is running.
-  // Why it is used: Lets us show a spinner instead of a blank screen.
-  const [isLoading, setIsLoading] = useState(true);
-
-  // HOOK 5: useState for error
-  // What it does: Stores an error message if loading fails.
-  // Why it is used: Lets us show an error screen with a Retry button instead of crashing.
-  const [error, setError] = useState(null);
-
-  // HOOK 6: useState for refreshing
-  // What it does: True while the user is pulling down to refresh.
-  // Why it is used: FlatList's pull-to-refresh needs a boolean to show and hide the spinner.
+  // This state controls FlatList's pull-to-refresh indicator.
   const [refreshing, setRefreshing] = useState(false);
 
   // HOOK 7: useState for failedImageIds
@@ -76,10 +68,10 @@ export default function MenuScreen({ navigation }) {
   // Why it is used: The TextInput is "controlled", so it needs state to show the typed text.
   const [searchText, setSearchText] = useState('');
 
-  // HOOK 12: useState for debouncedQuery
-  // What it does: Holds the search text AFTER the user has stopped typing for 400 ms.
-  // Why it is used: Filtering on every keystroke is wasteful. We filter only with this delayed value.
-  const [debouncedQuery, setDebouncedQuery] = useState('');
+  // This hook applies search text only after 400 ms without typing.
+  const debouncedQuery = useDebounce(searchText, 400);
+  // This value clears results immediately when the user clears the search box.
+  const activeQuery = searchText.trim() ? debouncedQuery : '';
 
   // HOOK 13: useState for recentSearches
   // What it does: Stores the last 5 different searches.
@@ -104,12 +96,6 @@ export default function MenuScreen({ navigation }) {
   // or when the clear button is tapped. Doing this with state would be awkward.
   const inputRef = useRef(null);
 
-  // REF 2: useRef for the debounce timer id (debounceRef)
-  // What it does: Stores the id of the running setTimeout between renders.
-  // Why it is used: We must remember the old timer id to cancel it on the next keystroke.
-  // A ref is perfect because changing it does NOT cause a re-render.
-  const debounceRef = useRef(null);
-
   // REF 3: useRef for the FlatList (flatListRef)
   // What it does: Gives us a handle to the FlatList component.
   // Why it is used: So the back-to-top button can call flatListRef.current.scrollToOffset(...).
@@ -129,68 +115,10 @@ export default function MenuScreen({ navigation }) {
   const renderCountRef = useRef(0);
   renderCountRef.current += 1;
 
-  /**
-   * Helper function to load menu data (used by the Retry button).
-   * Resolves after 1.5 seconds or rejects if SIMULATE_ERROR is true.
-   */
-  const loadMenu = (isPullToRefresh = false) => {
-    if (!isPullToRefresh) {
-      setIsLoading(true);
-    }
-    setError(null);
-
-    let isMounted = true;
-
-    fetchMenuData()
-      .then((data) => {
-        if (isMounted) {
-          setIsLoading(false);
-          setRefreshing(false);
-        }
-      })
-      .catch((err) => {
-        if (isMounted) {
-          setError(err.message || 'Something went wrong while loading the menu.');
-          setIsLoading(false);
-          setRefreshing(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  };
-
-  // HOOK 8: useEffect for initial data loading (mount effect)
-  // What it does: Runs once when the screen mounts to start the 1.5 second fetch.
-  // Why it is used: The empty dependency array [] means "run only on mount".
-  // The cleanup function stops state updates if the user leaves before the Promise finishes.
-  useEffect(() => {
-    let active = true;
-
-    fetchMenuData()
-      .then((data) => {
-        if (active) {
-          setIsLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (active) {
-          setError(err.message || 'Failed to load menu.');
-          setIsLoading(false);
-        }
-      });
-
-    // Cleanup: no state update after unmount
-    return () => {
-      active = false;
-    };
-  }, []);
-
   // This memo derives filtered and sorted rows from their source values.
   // Derived data stays out of state so it cannot become stale or need a syncing effect.
   const visibleItems = useMemo(() => {
-    const query = debouncedQuery.toLowerCase();
+    const query = activeQuery.toLowerCase();
     const filtered = menuItems.filter((item) => {
       const matchesCategory =
         selectedCategory === 'All' ||
@@ -206,7 +134,7 @@ export default function MenuScreen({ navigation }) {
     if (sortOrder === 'priceHigh') return filtered.sort((a, b) => b.price - a.price);
     if (sortOrder === 'name') return filtered.sort((a, b) => a.name.localeCompare(b.name));
     return filtered;
-  }, [menuItems, selectedCategory, debouncedQuery, sortOrder]);
+  }, [menuItems, selectedCategory, activeQuery, sortOrder]);
 
   // HOOK 10: useEffect for updating the screen header title with the item count
   // What it does: Updates the header to show how many items are visible, e.g. "Menu (5)".
@@ -217,35 +145,14 @@ export default function MenuScreen({ navigation }) {
     });
   }, [visibleItems.length, navigation]);
 
-  // HOOK 16: useEffect for debounce cleanup on unmount
-  // What it does: Cancels any pending search timer when the screen closes.
-  // Why it is used: Otherwise the timer could fire after unmount and try to update state.
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
-    };
-  }, []);
-
   // =========================================================================
   // HANDLERS
   // =========================================================================
 
-  /**
-   * Pull to refresh handler for FlatList
-   */
+  // This handler reloads the server menu while keeping FlatList's refresh spinner visible.
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchMenuData()
-      .then((data) => {
-        setError(null);
-        setRefreshing(false);
-      })
-      .catch((err) => {
-        setError(err.message || 'Failed to refresh menu.');
-        setRefreshing(false);
-      });
+    refetch().catch(() => {}).finally(() => setRefreshing(false));
   };
 
   // This callback marks a broken image without changing the callback prop for other cards.
@@ -268,31 +175,24 @@ export default function MenuScreen({ navigation }) {
     );
   }, []);
 
-  // Q5: save a search into the recent list (max 5, no duplicates, no repeat of the last one)
-  const saveRecentSearch = (query) => {
+  // This callback keeps only the five newest distinct searches.
+  const saveRecentSearch = useCallback((query) => {
     if (!query) return;
     if (previousQueryRef.current === query) return; // same as last saved search
     previousQueryRef.current = query;
     setRecentSearches((prev) =>
       [query, ...prev.filter((q) => q.toLowerCase() !== query.toLowerCase())].slice(0, 5)
     );
-  };
+  }, []);
 
-  // Q5: runs on every keystroke. Manual 400 ms debounce using the timer stored in debounceRef.
+  // This effect saves a search after useDebounce applies the final typed value.
+  useEffect(() => {
+    saveRecentSearch(activeQuery.trim());
+  }, [activeQuery, saveRecentSearch]);
+
+  // This handler updates the controlled text field; useDebounce handles the wait.
   const handleSearchChange = (text) => {
-    setSearchText(text); // update the input instantly
-
-    // Cancel the previous timer (the user is still typing)
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-
-    // Start a new timer: only after 400 ms of silence do we apply the search
-    debounceRef.current = setTimeout(() => {
-      const trimmed = text.trim();
-      setDebouncedQuery(trimmed);
-      saveRecentSearch(trimmed);
-    }, 400);
+    setSearchText(text);
   };
 
   // Q5: tapping the search icon focuses the TextInput through its ref
@@ -304,11 +204,7 @@ export default function MenuScreen({ navigation }) {
 
   // Q5: clear button empties the text and keeps focus in the input
   const handleClearSearch = () => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current); // cancel any pending search
-    }
     setSearchText('');
-    setDebouncedQuery('');
     if (inputRef.current) {
       inputRef.current.focus();
     }
@@ -316,11 +212,7 @@ export default function MenuScreen({ navigation }) {
 
   // Q5: tapping a recent search chip fills the box and searches immediately
   const handleRecentPress = (query) => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
     setSearchText(query);
-    setDebouncedQuery(query);
     if (inputRef.current) {
       inputRef.current.focus();
     }
@@ -358,17 +250,17 @@ export default function MenuScreen({ navigation }) {
   // CONDITIONAL RENDERS: Loading & Error States
   // =========================================================================
 
-  if (isLoading) {
+  if (isLoading && menuItems.length === 0) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading delicious menu items...</Text>
-        <Text style={styles.loadingSubtext}>Please wait (1.5s simulated delay)</Text>
+        <Text style={styles.loadingSubtext}>Loading the current restaurant menu...</Text>
       </View>
     );
   }
 
-  if (error) {
+  if (error && menuItems.length === 0) {
     return (
       <View style={styles.centerContainer}>
         <Text style={styles.errorIcon}>⚠️</Text>
@@ -376,7 +268,7 @@ export default function MenuScreen({ navigation }) {
         <Text style={styles.errorMessage}>{error}</Text>
         <TouchableOpacity
           style={styles.retryButton}
-          onPress={() => loadMenu(false)}
+          onPress={() => refetch().catch(() => {})}
           activeOpacity={0.8}
         >
           <Text style={styles.retryButtonText}>Retry Loading</Text>
@@ -450,6 +342,15 @@ export default function MenuScreen({ navigation }) {
         )}
       </View>
 
+      {error && (
+        <View style={styles.inlineError}>
+          <Text style={styles.inlineErrorText}>{error}</Text>
+          <TouchableOpacity onPress={() => refetch().catch(() => {})} activeOpacity={0.8}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Category Chips */}
       <View style={styles.chipsWrapper}>
         <ScrollView
@@ -518,7 +419,7 @@ export default function MenuScreen({ navigation }) {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
-              {debouncedQuery
+              {activeQuery
                 ? 'No dishes found. Try a different search!'
                 : 'No items found in this category.'}
             </Text>
@@ -611,6 +512,15 @@ function makeStyles(colors) {
     fontWeight: '700',
     fontSize: 15,
   },
+  inlineError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  inlineErrorText: { color: colors.error, flex: 1, fontSize: 12, marginRight: 8 },
 
   // ---- Q5 search styles ----
   searchWrapper: {
