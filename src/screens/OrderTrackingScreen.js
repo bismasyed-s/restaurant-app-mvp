@@ -1,44 +1,59 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import useOrders from '../hooks/useOrders';
 import useTheme from '../hooks/useTheme';
+import { apiRequest } from '../api/client';
 
 const ORDER_STEPS = ['Pending', 'Preparing', 'Ready', 'Served'];
-const STATUS_RANK = { Pending: 0, Preparing: 1, Ready: 2, Served: 3, Cancelled: 3 };
 
 export default function OrderTrackingScreen({ route }) {
-  // This hook reads the selected shared order and dispatches timer-driven status changes.
-  const { state, dispatch } = useOrders();
   // This hook supplies theme colors for the tracking view.
   const { colors } = useTheme();
   // This state records elapsed seconds so the running timer can update the screen.
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  // This state holds the latest version of the order read from the server.
+  const [order, setOrder] = useState(null);
+  // This state shows any problem while the server order is being loaded.
+  const [error, setError] = useState(null);
   // This memo rebuilds tracking styles only when the active palette changes.
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const orderId = route.params?.orderId;
-  const order = state.orders.find((savedOrder) => savedOrder.id === orderId);
 
-  // This effect advances the order at the demo intervals and clears its interval on cleanup.
+  // This effect loads the order now, checks for status changes every ten seconds, and stops on exit.
   useEffect(() => {
-    if (!order || order.status === 'Served' || order.status === 'Cancelled') return undefined;
-
-    const statusInterval = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - new Date(order.timestamp).getTime()) / 1000);
-      const nextStatus = elapsed >= 30 ? 'Served' : elapsed >= 20 ? 'Ready' : elapsed >= 10 ? 'Preparing' : 'Pending';
-      if (STATUS_RANK[nextStatus] > STATUS_RANK[order.status]) {
-        dispatch({ type: 'UPDATE_ORDER_STATUS', id: order.id, status: nextStatus });
+    let isActive = true;
+    const loadMyOrder = async () => {
+      try {
+        const orders = await apiRequest('/api/orders/my');
+        const current = orders.find((item) => item._id === orderId);
+        if (!current) throw new Error('This order could not be found.');
+        if (isActive) {
+          setOrder({
+            ...current,
+            id: current._id,
+            timestamp: current.createdAt,
+            tableId: current.table?.number || current.table,
+            items: current.items.map((item, index) => ({ ...item, id: item._id || item.menuItem || String(index) })),
+          });
+          setError(null);
+        }
+      } catch (requestError) {
+        if (isActive) setError(requestError.message);
       }
-    }, 1000);
+    };
+    loadMyOrder();
+    const statusInterval = setInterval(loadMyOrder, 10000);
+    return () => {
+      isActive = false;
+      clearInterval(statusInterval);
+    };
+  }, [orderId]);
 
-    return () => clearInterval(statusInterval);
-  }, [order?.id, order?.timestamp, order?.status, dispatch]);
-
-  // This effect refreshes elapsed time once per second and clears its interval when the order changes.
+  // This effect updates the elapsed counter every second and clears the timer when the order changes.
   useEffect(() => {
     if (!order) return undefined;
 
     const updateElapsed = () => {
-      setElapsedSeconds(Math.floor((Date.now() - new Date(order.timestamp).getTime()) / 1000));
+      setElapsedSeconds(Math.floor((Date.now() - new Date(order.createdAt || order.timestamp).getTime()) / 1000));
     };
     updateElapsed();
     const elapsedInterval = setInterval(updateElapsed, 1000);
@@ -49,7 +64,7 @@ export default function OrderTrackingScreen({ route }) {
     return (
       <View style={styles.container}>
         <Text style={styles.title}>Order not found</Text>
-        <Text style={styles.body}>Place an order from your cart to track it here.</Text>
+        <Text style={styles.body}>{error || 'Place an order from your cart to track it here.'}</Text>
       </View>
     );
   }
@@ -83,8 +98,8 @@ export default function OrderTrackingScreen({ route }) {
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Items</Text>
-        {order.items.map((item) => (
-          <View key={item.id} style={styles.itemRow}>
+        {order.items.map((item, index) => (
+          <View key={item.id || index} style={styles.itemRow}>
             <Text style={styles.body}>{item.name} x {item.quantity}</Text>
             <Text style={styles.body}>${(item.price * item.quantity).toFixed(2)}</Text>
             {!!item.note && <Text style={styles.note}>{item.note}</Text>}

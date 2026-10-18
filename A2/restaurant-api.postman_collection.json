@@ -1,0 +1,54 @@
+{
+  "info": {
+    "name": "Restaurant App A2 API",
+    "description": "Q2-Q7 backend checks. Set baseUrl to the laptop address and run the login requests to store tokens.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000" },
+    { "key": "customerToken", "value": "" },
+    { "key": "managerToken", "value": "" },
+    { "key": "menuItemId", "value": "REPLACE_WITH_MENU_ITEM_ID" },
+    { "key": "orderId", "value": "REPLACE_WITH_ORDER_ID" },
+    { "key": "reservationId", "value": "REPLACE_WITH_RESERVATION_ID" },
+    { "key": "tableId", "value": "REPLACE_WITH_TABLE_ID" }
+  ],
+  "item": [
+    { "name": "Health", "request": { "method": "GET", "url": "{{baseUrl}}/api/health" } },
+    { "name": "Auth", "item": [
+      { "name": "Register customer", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"name\":\"Postman Customer\",\"email\":\"new-customer@example.com\",\"password\":\"Pass1234\",\"role\":\"customer\"}" }, "url": "{{baseUrl}}/api/auth/register" } },
+      { "name": "Login customer", "event": [{ "listen": "test", "script": { "exec": ["if (pm.response.code === 200) pm.collectionVariables.set('customerToken', pm.response.json().token);"] } }], "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\":\"customer@test.com\",\"password\":\"Pass1234\"}" }, "url": "{{baseUrl}}/api/auth/login" } },
+      { "name": "Login manager", "event": [{ "listen": "test", "script": { "exec": ["if (pm.response.code === 200) pm.collectionVariables.set('managerToken', pm.response.json().token);"] } }], "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\":\"manager@test.com\",\"password\":\"Pass1234\"}" }, "url": "{{baseUrl}}/api/auth/login" } },
+      { "name": "Current user (customer token)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": "{{baseUrl}}/api/auth/me" } }
+    ] },
+    { "name": "Menu", "item": [
+      { "name": "List menu", "request": { "method": "GET", "url": "{{baseUrl}}/api/menu" } },
+      { "name": "Filter and search menu", "request": { "method": "GET", "url": "{{baseUrl}}/api/menu?category=Mains&search=burger" } },
+      { "name": "Get menu item", "request": { "method": "GET", "url": "{{baseUrl}}/api/menu/{{menuItemId}}" } },
+      { "name": "Get menu item with wrong id (400)", "request": { "method": "GET", "url": "{{baseUrl}}/api/menu/not-an-object-id" } },
+      { "name": "Add item with no token (401)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"name\":\"Postman Test Dish\",\"description\":\"Test\",\"price\":5,\"category\":\"Starters\"}" }, "url": "{{baseUrl}}/api/menu" } },
+      { "name": "Add item with customer token (403)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{customerToken}}" }], "body": { "mode": "raw", "raw": "{\"name\":\"Postman Test Dish\",\"price\":5,\"category\":\"Starters\"}" }, "url": "{{baseUrl}}/api/menu" } },
+      { "name": "Add item with manager token (201)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }], "body": { "mode": "raw", "raw": "{\"name\":\"Postman Test Dish\",\"description\":\"Created in Postman\",\"price\":5,\"category\":\"Starters\",\"isSpecial\":false,\"isAvailable\":true}" }, "url": "{{baseUrl}}/api/menu" } },
+      { "name": "Add item missing name (400)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }], "body": { "mode": "raw", "raw": "{\"price\":5,\"category\":\"Starters\"}" }, "url": "{{baseUrl}}/api/menu" } },
+      { "name": "Add item negative price (400)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }], "body": { "mode": "raw", "raw": "{\"name\":\"Negative Test\",\"price\":-1,\"category\":\"Starters\"}" }, "url": "{{baseUrl}}/api/menu" } },
+      { "name": "Update menu item", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }], "body": { "mode": "raw", "raw": "{\"price\":18.5,\"isAvailable\":true}" }, "url": "{{baseUrl}}/api/menu/{{menuItemId}}" } },
+      { "name": "Delete menu item", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }], "url": "{{baseUrl}}/api/menu/{{menuItemId}}" } }
+    ] },
+    { "name": "Tables and reservations", "item": [
+      { "name": "List tables", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": "{{baseUrl}}/api/tables" } },
+      { "name": "Check availability", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": "{{baseUrl}}/api/reservations/availability?date=2026-12-01&timeSlot=19%3A00&partySize=2" } },
+      { "name": "Create reservation", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{customerToken}}" }], "body": { "mode": "raw", "raw": "{\"table\":\"{{tableId}}\",\"date\":\"2026-12-01\",\"timeSlot\":\"19:00\",\"partySize\":2,\"phone\":\"0300-1234567\"}" }, "url": "{{baseUrl}}/api/reservations" } },
+      { "name": "My reservations", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": "{{baseUrl}}/api/reservations/my" } },
+      { "name": "All reservations (manager)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }], "url": "{{baseUrl}}/api/reservations" } },
+      { "name": "Accept or decline reservation (manager)", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }], "body": { "mode": "raw", "raw": "{\"status\":\"Accepted\"}" }, "url": "{{baseUrl}}/api/reservations/{{reservationId}}" } },
+      { "name": "Cancel own reservation", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{customerToken}}" }], "body": { "mode": "raw", "raw": "{\"status\":\"Cancelled\"}" }, "url": "{{baseUrl}}/api/reservations/{{reservationId}}" } }
+    ] },
+    { "name": "Orders", "item": [
+      { "name": "Place order (server prices; try promo WELCOME10)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{customerToken}}" }], "body": { "mode": "raw", "raw": "{\"items\":[{\"menuItem\":\"{{menuItemId}}\",\"quantity\":2,\"note\":\"No onions\"}],\"type\":\"Takeaway\",\"pickupTime\":\"19:00\",\"promoCode\":\"WELCOME10\",\"total\":0.01}" }, "url": "{{baseUrl}}/api/orders" } },
+      { "name": "My orders", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": "{{baseUrl}}/api/orders/my" } },
+      { "name": "All orders (manager)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }], "url": "{{baseUrl}}/api/orders" } },
+      { "name": "Advance order status (manager)", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }], "body": { "mode": "raw", "raw": "{\"status\":\"Preparing\"}" }, "url": "{{baseUrl}}/api/orders/{{orderId}}/status" } },
+      { "name": "Cancel own pending order", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{customerToken}}" }], "body": { "mode": "raw", "raw": "{\"status\":\"Cancelled\"}" }, "url": "{{baseUrl}}/api/orders/{{orderId}}/status" } }
+    ] }
+  ]
+}

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   ScrollView,
@@ -11,55 +11,64 @@ import {
 import { PROMO_CODES } from '../reducers/cartReducer';
 import useCart from '../hooks/useCart';
 import useTheme from '../hooks/useTheme';
-import useOrders from '../hooks/useOrders';
-import useAuth from '../hooks/useAuth';
-import { mockTables } from '../data/reservations';
+import useApi from '../hooks/useApi';
+import { apiRequest } from '../api/client';
 
 export default function CartScreen({ navigation }) {
   // This hook supplies cart items and dispatches their quantity, note, and promo actions.
   const { state, dispatch } = useCart();
-  // This hook creates saved orders after the customer chooses how to receive the order.
-  const { dispatch: dispatchOrder } = useOrders();
-  // This hook supplies the current customer identity for the order record.
-  const { user } = useAuth();
   // This hook supplies the active palette so the cart follows the app theme.
   const { colors } = useTheme();
   // This state holds the code currently being entered in the promo box.
   const [promoInput, setPromoInput] = useState('');
   // This state chooses whether the order is eaten in or collected.
   const [orderType, setOrderType] = useState('Dine-in');
-  // This state stores the selected table for dine-in orders.
-  const [selectedTableId, setSelectedTableId] = useState(mockTables[0].id);
+  // This state stores the selected database table for dine-in orders.
+  const [selectedTableId, setSelectedTableId] = useState('');
   // This state stores the pickup time for takeaway orders.
   const [pickupTime, setPickupTime] = useState('19:00');
   // This memo rebuilds the cart styles only when the active palette changes.
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  // This callback loads real tables from the server for dine-in orders.
+  const fetchTables = useCallback(() => apiRequest('/api/tables'), []);
+  // This hook loads the restaurant's table list.
+  const { data: tableResponse, loading: tablesLoading } = useApi(fetchTables, { initialData: [] });
+  const tables = tableResponse || [];
+
+  // This effect selects the first real table after the list loads.
+  useEffect(() => {
+    if (!selectedTableId && tables.length > 0) setSelectedTableId(tables[0]._id);
+  }, [selectedTableId, tables]);
 
   const itemCount = state.items.reduce((total, item) => total + item.quantity, 0);
   const subtotal = state.items.reduce((total, item) => total + item.price * item.quantity, 0);
   const discount = subtotal * (state.discountPercent / 100);
-  const total = subtotal - discount;
+  const total = subtotal + subtotal * 0.05 + subtotal * 0.15 - discount;
 
-  const placeOrder = () => {
+  const placeOrder = async () => {
     if (state.items.length === 0) {
       Alert.alert('Cart is empty', 'Add an item before placing your order.');
       return;
     }
-    const orderId = `order_${Date.now()}`;
-    const order = {
-      id: orderId,
-      items: state.items.map((item) => ({ ...item })),
-      total: subtotal + subtotal * 0.05 + subtotal * 0.15 - discount,
-      type: orderType,
-      status: 'Pending',
-      timestamp: new Date().toISOString(),
-      customerId: user?.id || null,
-      customerName: user?.fullName || 'Customer',
-      ...(orderType === 'Dine-in' ? { tableId: selectedTableId } : { pickupTime }),
-    };
-    dispatchOrder({ type: 'ADD_ORDER', order });
-    dispatch({ type: 'CLEAR_CART' });
-    navigation.navigate('OrderTracking', { orderId });
+    if (orderType === 'Dine-in' && !selectedTableId) {
+      Alert.alert('Choose a table', tablesLoading ? 'Tables are still loading.' : 'No table is available.');
+      return;
+    }
+    try {
+      const order = await apiRequest('/api/orders', {
+        method: 'POST',
+        body: {
+          items: state.items.map((item) => ({ menuItem: item.id, quantity: item.quantity, note: item.note || '' })),
+          type: orderType,
+          ...(orderType === 'Dine-in' ? { table: selectedTableId } : { pickupTime }),
+          promoCode: state.promoCode || '',
+        },
+      });
+      dispatch({ type: 'CLEAR_CART' });
+      navigation.navigate('OrderTracking', { orderId: order._id });
+    } catch (error) {
+      Alert.alert('Could not place order', error.message);
+    }
   };
 
   const applyPromo = () => {
@@ -167,15 +176,15 @@ export default function CartScreen({ navigation }) {
         </View>
         {orderType === 'Dine-in' ? (
           <View style={styles.tableChoices}>
-            {mockTables.map((table) => (
+            {tables.map((table) => (
               <TouchableOpacity
-                key={table.id}
-                style={[styles.tableButton, selectedTableId === table.id && styles.orderTypeButtonSelected]}
-                onPress={() => setSelectedTableId(table.id)}
+                key={table._id}
+                style={[styles.tableButton, selectedTableId === table._id && styles.orderTypeButtonSelected]}
+                onPress={() => setSelectedTableId(table._id)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.orderTypeText, selectedTableId === table.id && styles.orderTypeTextSelected]}>
-                  {table.name}
+                <Text style={[styles.orderTypeText, selectedTableId === table._id && styles.orderTypeTextSelected]}>
+                  Table {table.number} ({table.seats})
                 </Text>
               </TouchableOpacity>
             ))}
