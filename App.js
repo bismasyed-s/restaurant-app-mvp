@@ -8,20 +8,20 @@ import { AuthProvider } from './src/context/AuthContext';
 import { ThemeProvider } from './src/context/ThemeContext';
 import { CartProvider } from './src/context/CartContext';
 import { OrdersProvider } from './src/context/OrdersContext';
-import useOrders from './src/hooks/useOrders';
+import useAuth from './src/hooks/useAuth';
 import useTheme from './src/hooks/useTheme';
 
 function AppContent() {
-  // This hook waits for saved app data before navigation can show empty screens.
-  const { state } = useOrders();
+  // This hook waits for a saved login before navigation chooses a user screen.
+  const { isLoading } = useAuth();
   // This hook colors the startup loading screen with the selected global theme.
   const { colors } = useTheme();
 
-  if (!state.isLoaded) {
+  if (isLoading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={{ color: colors.text, marginTop: 12 }}>Loading restaurant data...</Text>
+        <Text style={{ color: colors.text, marginTop: 12 }}>Restoring your login...</Text>
       </View>
     );
   }

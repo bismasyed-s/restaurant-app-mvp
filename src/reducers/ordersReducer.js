@@ -2,7 +2,7 @@ export const createInitialOrdersState = () => ({
   orders: [],
   reservations: [],
   menuItems: [],
-  isLoaded: false,
+  isLoaded: true,
 });
 
 export default function ordersReducer(state, action) {
