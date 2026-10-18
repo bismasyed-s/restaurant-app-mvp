@@ -133,11 +133,11 @@ Keep straightforward values and handlers simple until repeated work is measurabl
 
 ## Q10 demo recording
 
-**A1 demo video (maximum three minutes):** `[Add the A1 customer and manager flow recording link here]`
+**A1 demo video (maximum three minutes):** In the file "Restaurant-App-mvp-demo.mp4"
 
 ## A2 two-device demo recording
 
-**A2 video (maximum four minutes):** `[Add the customer and manager order and reservation recording link here]`
+**A2 video (maximum four minutes):**
 
 Customer phone video: [Watch the customer phone video](https://drive.google.com/file/d/1MPxAMDysxMo2pALl-JD4mqhu0WFKcfY0/view?usp=drive_link)
 
