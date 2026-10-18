@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -11,15 +11,21 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { initialUsers } from '../data/users';
-import { lightColors } from '../theme/colors';
+import useAuth from '../hooks/useAuth';
+import useTheme from '../hooks/useTheme';
 
 /**
  * LoginScreen
  * Handles both Login and Signup functionality using useState only (no context or external state library).
  * Features controlled inputs, field-level validation, simulated network delay, and role-based navigation.
  */
-export default function LoginScreen({ navigation }) {
+export default function LoginScreen() {
+  // This hook provides shared accounts and saves a successfully authenticated user.
+  const { login, users, registerUser } = useAuth();
+  // This hook supplies the active palette so login colors follow the global theme.
+  const { colors } = useTheme();
+  // This memo rebuilds styles only when the active color palette changes.
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   // HOOK 1: useState for mode
   // What it does: Tracks whether the user is on the 'login' screen or 'signup' screen.
   // Why it is used: Allows toggling between Login and Signup forms within a single screen component.
@@ -65,10 +71,6 @@ export default function LoginScreen({ navigation }) {
   // Why it is used: Disables the submit button and displays an ActivityIndicator to prevent duplicate submissions.
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // HOOK 10: useState for registered users array
-  // What it does: Holds the current list of users, initialized with mock data from users.js.
-  // Why it is used: In the absence of a backend, new signups are saved in this state array so they can immediately log in.
-  const [users, setUsers] = useState(initialUsers);
 
   /**
    * Helper function to clear field error as soon as the user starts editing that field.
@@ -133,7 +135,7 @@ export default function LoginScreen({ navigation }) {
   /**
    * Handles Form Submission (Login or Signup)
    * Simulates network delay with a 1-second setTimeout.
-   * Navigates Customer to MenuScreen and Manager to DashboardScreen on success.
+   * Stores the authenticated user so the navigator can open the correct role-based tabs.
    * Shows an Alert on failure.
    */
   const handleSubmit = () => {
@@ -156,12 +158,8 @@ export default function LoginScreen({ navigation }) {
         );
 
         if (foundUser) {
-          // Role-based navigation
-          if (foundUser.role === 'manager') {
-            navigation.navigate('Dashboard', { user: foundUser });
-          } else {
-            navigation.navigate('Menu', { user: foundUser });
-          }
+          // Store the signed-in user; the navigator opens the correct role-based tabs.
+          login(foundUser);
         } else {
           Alert.alert(
             'Login Failed',
@@ -187,7 +185,7 @@ export default function LoginScreen({ navigation }) {
         };
 
         // Append new user to local state array
-        setUsers((prevUsers) => [...prevUsers, newUser]);
+        registerUser(newUser);
 
         Alert.alert(
           'Signup Successful',
@@ -196,11 +194,7 @@ export default function LoginScreen({ navigation }) {
             {
               text: 'OK',
               onPress: () => {
-                if (newUser.role === 'manager') {
-                  navigation.navigate('Dashboard', { user: newUser });
-                } else {
-                  navigation.navigate('Menu', { user: newUser });
-                }
+                login(newUser);
               },
             },
           ]
@@ -272,7 +266,7 @@ export default function LoginScreen({ navigation }) {
               <TextInput
                 style={[styles.input, errors.fullName && styles.inputError]}
                 placeholder="e.g. John Doe"
-                placeholderTextColor={lightColors.textMuted}
+                placeholderTextColor={colors.textMuted}
                 value={fullName}
                 onChangeText={(text) => handleFieldChange('fullName', text, setFullName)}
                 editable={!isSubmitting}
@@ -290,7 +284,7 @@ export default function LoginScreen({ navigation }) {
             <TextInput
               style={[styles.input, errors.email && styles.inputError]}
               placeholder="e.g. customer@test.com"
-              placeholderTextColor={lightColors.textMuted}
+              placeholderTextColor={colors.textMuted}
               value={email}
               onChangeText={(text) => handleFieldChange('email', text, setEmail)}
               editable={!isSubmitting}
@@ -317,7 +311,7 @@ export default function LoginScreen({ navigation }) {
             <TextInput
               style={[styles.input, errors.password && styles.inputError]}
               placeholder="Min 8 characters with 1 digit"
-              placeholderTextColor={lightColors.textMuted}
+              placeholderTextColor={colors.textMuted}
               value={password}
               onChangeText={(text) => handleFieldChange('password', text, setPassword)}
               editable={!isSubmitting}
@@ -336,7 +330,7 @@ export default function LoginScreen({ navigation }) {
               <TextInput
                 style={[styles.input, errors.confirmPassword && styles.inputError]}
                 placeholder="Re-enter your password"
-                placeholderTextColor={lightColors.textMuted}
+                placeholderTextColor={colors.textMuted}
                 value={confirmPassword}
                 onChangeText={(text) =>
                   handleFieldChange('confirmPassword', text, setConfirmPassword)
@@ -404,7 +398,7 @@ export default function LoginScreen({ navigation }) {
           >
             {isSubmitting ? (
               <View style={styles.submittingContainer}>
-                <ActivityIndicator color="#FFFFFF" size="small" />
+                <ActivityIndicator color={colors.badgeText} size="small" />
                 <Text style={styles.submitButtonText}>
                   {mode === 'login' ? 'Signing In...' : 'Creating Account...'}
                 </Text>
@@ -434,10 +428,11 @@ export default function LoginScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors) {
+  return StyleSheet.create({
   keyboardContainer: {
     flex: 1,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
   },
   scrollContent: {
     flexGrow: 1,
@@ -453,17 +448,17 @@ const styles = StyleSheet.create({
   brandTitle: {
     fontSize: 32,
     fontWeight: '800',
-    color: lightColors.primary,
+    color: colors.primary,
     letterSpacing: 0.5,
   },
   brandSubtitle: {
     fontSize: 14,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     marginTop: 4,
   },
   modeTabs: {
     flexDirection: 'row',
-    backgroundColor: '#EAEAEA',
+    backgroundColor: colors.borderLight,
     borderRadius: 12,
     padding: 4,
     marginBottom: 16,
@@ -475,7 +470,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   tabButtonActive: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.15,
@@ -485,14 +480,14 @@ const styles = StyleSheet.create({
   tabButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
   },
   tabButtonTextActive: {
-    color: lightColors.primary,
+    color: colors.primary,
     fontWeight: '700',
   },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 16,
     padding: 20,
     shadowColor: '#000',
@@ -504,7 +499,7 @@ const styles = StyleSheet.create({
   formTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: lightColors.text,
+    color: colors.text,
     marginBottom: 16,
   },
   fieldContainer: {
@@ -513,7 +508,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: '600',
-    color: lightColors.text,
+    color: colors.text,
     marginBottom: 6,
   },
   passwordHeader: {
@@ -523,26 +518,26 @@ const styles = StyleSheet.create({
   },
   showHideText: {
     fontSize: 13,
-    color: lightColors.primary,
+    color: colors.primary,
     fontWeight: '600',
   },
   input: {
-    backgroundColor: lightColors.inputBackground,
+    backgroundColor: colors.inputBackground,
     borderWidth: 1,
-    borderColor: lightColors.inputBorder,
+    borderColor: colors.inputBorder,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 11,
     fontSize: 15,
-    color: lightColors.text,
+    color: colors.text,
   },
   inputError: {
-    borderColor: lightColors.error,
-    backgroundColor: '#FFEBEE',
+    borderColor: colors.error,
+    backgroundColor: colors.primaryLight,
   },
   errorText: {
     fontSize: 12,
-    color: lightColors.error,
+    color: colors.error,
     marginTop: 4,
     fontWeight: '500',
   },
@@ -553,27 +548,27 @@ const styles = StyleSheet.create({
   roleOption: {
     flex: 1,
     borderWidth: 1.5,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: 'center',
-    backgroundColor: lightColors.inputBackground,
+    backgroundColor: colors.inputBackground,
   },
   roleOptionSelected: {
-    borderColor: lightColors.primary,
-    backgroundColor: lightColors.primaryLight,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
   },
   roleOptionText: {
     fontSize: 14,
     fontWeight: '600',
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
   },
   roleOptionTextSelected: {
-    color: lightColors.primaryDark,
+    color: colors.primaryDark,
     fontWeight: '700',
   },
   submitButton: {
-    backgroundColor: lightColors.primary,
+    backgroundColor: colors.primary,
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
@@ -581,7 +576,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   submitButtonDisabled: {
-    backgroundColor: lightColors.disabled,
+    backgroundColor: colors.disabled,
   },
   submittingContainer: {
     flexDirection: 'row',
@@ -589,31 +584,32 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   submitButtonText: {
-    color: '#FFFFFF',
+    color: colors.badgeText,
     fontSize: 16,
     fontWeight: '700',
   },
   quickInfoBox: {
     marginTop: 18,
     padding: 12,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.inputBackground,
     borderRadius: 8,
     borderLeftWidth: 3,
-    borderLeftColor: lightColors.primary,
+    borderLeftColor: colors.primary,
   },
   quickInfoTitle: {
     fontSize: 12,
     fontWeight: '700',
-    color: lightColors.text,
+    color: colors.text,
     marginBottom: 4,
   },
   quickInfoText: {
     fontSize: 12,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     marginVertical: 1,
   },
   bold: {
     fontWeight: '700',
-    color: lightColors.text,
+    color: colors.text,
   },
 });
+}

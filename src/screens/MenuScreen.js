@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
-  Image,
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
@@ -13,7 +12,10 @@ import {
   TextInput,
 } from 'react-native';
 import { fetchMenuData, CATEGORIES } from '../data/menu';
-import { lightColors } from '../theme/colors';
+import useTheme from '../hooks/useTheme';
+import useCart from '../hooks/useCart';
+import useOrders from '../hooks/useOrders';
+import MenuItemCard from '../components/MenuItemCard';
 
 /**
  * MenuScreen (Question 4 + Question 5)
@@ -23,24 +25,29 @@ import { lightColors } from '../theme/colors';
  *     FlatList ref + back-to-top button, render counter (useRef), recent searches.
  */
 export default function MenuScreen({ navigation }) {
+  // This hook provides the active palette so menu colors follow the global theme.
+  const { colors } = useTheme();
+  // This hook dispatches selected menu items into the shared cart.
+  const { dispatch } = useCart();
+  // This hook keeps manager menu edits in sync with the customer menu.
+  const { state: ordersState } = useOrders();
+  const menuItems = ordersState.menuItems;
+  // This memo rebuilds styles only when the active color palette changes.
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   // =========================================================================
   // HOOKS SECTION (every hook and ref has a simple English comment for the viva)
   // =========================================================================
-
-  // HOOK 1: useState for menuItems
-  // What it does: Holds the complete master list of menu items loaded from the Promise.
-  // Why it is used: UI is driven by state. We store the data once fetched so we can render it.
-  const [menuItems, setMenuItems] = useState([]);
-
-  // HOOK 2: useState for filteredItems
-  // What it does: Stores the items that match the selected category chip.
-  // Why it is used: Keeps the displayed list separate from the master list so we never lose the original data.
-  const [filteredItems, setFilteredItems] = useState([]);
 
   // HOOK 3: useState for selectedCategory
   // What it does: Tracks which category chip is active ('All', 'Starters', ...).
   // Why it is used: Highlights the chip and triggers the filtering effect when it changes.
   const [selectedCategory, setSelectedCategory] = useState('All');
+
+  // This state selects the sort order so tapping a sort option updates the visible rows.
+  const [sortOrder, setSortOrder] = useState('default');
+
+  // This state holds favourite ids so the tapped heart updates and the other cards can stay memoized.
+  const [favoriteIds, setFavoriteIds] = useState([]);
 
   // HOOK 4: useState for isLoading
   // What it does: True while the 1.5 second fake fetch is running.
@@ -137,7 +144,6 @@ export default function MenuScreen({ navigation }) {
     fetchMenuData()
       .then((data) => {
         if (isMounted) {
-          setMenuItems(data);
           setIsLoading(false);
           setRefreshing(false);
         }
@@ -165,7 +171,6 @@ export default function MenuScreen({ navigation }) {
     fetchMenuData()
       .then((data) => {
         if (active) {
-          setMenuItems(data);
           setIsLoading(false);
         }
       })
@@ -182,32 +187,26 @@ export default function MenuScreen({ navigation }) {
     };
   }, []);
 
-  // HOOK 9: useEffect for category filtering
-  // What it does: Re-filters menuItems whenever selectedCategory or menuItems changes.
-  // Why it is used: With [selectedCategory, menuItems], tapping a chip or reloading the menu
-  // automatically updates filteredItems.
-  useEffect(() => {
-    if (selectedCategory === 'All') {
-      setFilteredItems(menuItems);
-    } else {
-      const filtered = menuItems.filter(
-        (item) => item.category.toLowerCase() === selectedCategory.toLowerCase()
-      );
-      setFilteredItems(filtered);
-    }
-  }, [selectedCategory, menuItems]);
+  // This memo derives filtered and sorted rows from their source values.
+  // Derived data stays out of state so it cannot become stale or need a syncing effect.
+  const visibleItems = useMemo(() => {
+    const query = debouncedQuery.toLowerCase();
+    const filtered = menuItems.filter((item) => {
+      const matchesCategory =
+        selectedCategory === 'All' ||
+        item.category.toLowerCase() === selectedCategory.toLowerCase();
+      const matchesSearch =
+        !query ||
+        item.name.toLowerCase().includes(query) ||
+        item.description.toLowerCase().includes(query);
+      return matchesCategory && matchesSearch;
+    });
 
-  // Q5: apply the debounced search on top of the category filter.
-  // This is a plain derived value (not state), so no extra hook is needed.
-  // It is recalculated every render from filteredItems + debouncedQuery.
-  const visibleItems = filteredItems.filter((item) => {
-    if (!debouncedQuery) return true;
-    const q = debouncedQuery.toLowerCase();
-    return (
-      item.name.toLowerCase().includes(q) ||
-      item.description.toLowerCase().includes(q)
-    );
-  });
+    if (sortOrder === 'priceLow') return filtered.sort((a, b) => a.price - b.price);
+    if (sortOrder === 'priceHigh') return filtered.sort((a, b) => b.price - a.price);
+    if (sortOrder === 'name') return filtered.sort((a, b) => a.name.localeCompare(b.name));
+    return filtered;
+  }, [menuItems, selectedCategory, debouncedQuery, sortOrder]);
 
   // HOOK 10: useEffect for updating the screen header title with the item count
   // What it does: Updates the header to show how many items are visible, e.g. "Menu (5)".
@@ -240,7 +239,6 @@ export default function MenuScreen({ navigation }) {
     setRefreshing(true);
     fetchMenuData()
       .then((data) => {
-        setMenuItems(data);
         setError(null);
         setRefreshing(false);
       })
@@ -250,9 +248,25 @@ export default function MenuScreen({ navigation }) {
       });
   };
 
-  const handleImageError = (id) => {
+  // This callback marks a broken image without changing the callback prop for other cards.
+  const handleImageError = useCallback((id) => {
     setFailedImageIds((prev) => ({ ...prev, [id]: true }));
-  };
+  }, []);
+
+  // This callback adds an item to the cart and is shared by every memoized card.
+  const handleAddToCart = useCallback((item) => {
+    dispatch({ type: 'ADD_ITEM', item });
+    Alert.alert('Item Added', `${item.name} added to your cart!`);
+  }, [dispatch]);
+
+  // This callback toggles a single favourite id and stays stable across card renders.
+  const handleToggleFavorite = useCallback((itemId) => {
+    setFavoriteIds((currentIds) =>
+      currentIds.includes(itemId)
+        ? currentIds.filter((id) => id !== itemId)
+        : [...currentIds, itemId]
+    );
+  }, []);
 
   // Q5: save a search into the recent list (max 5, no duplicates, no repeat of the last one)
   const saveRecentSearch = (query) => {
@@ -325,20 +339,20 @@ export default function MenuScreen({ navigation }) {
     }
   };
 
-  const getCategoryEmoji = (category) => {
-    switch (category) {
-      case 'Starters':
-        return '🥗';
-      case 'Mains':
-        return '🥩';
-      case 'Desserts':
-        return '🍰';
-      case 'Drinks':
-        return '🍹';
-      default:
-        return '🍽️';
-    }
-  };
+  // This callback keeps row rendering separate so memoized cards can skip unchanged props.
+  const renderMenuItem = useCallback(({ item }) => (
+    <MenuItemCard
+      item={item}
+      styles={styles}
+      colors={colors}
+      isFavorite={favoriteIds.includes(item.id)}
+      isImageBroken={Boolean(failedImageIds[item.id])}
+      onImageError={handleImageError}
+      onAddToCart={handleAddToCart}
+      onToggleFavorite={handleToggleFavorite}
+    />
+  ), [styles, colors, favoriteIds, failedImageIds, handleImageError, handleAddToCart, handleToggleFavorite]);
+
 
   // =========================================================================
   // CONDITIONAL RENDERS: Loading & Error States
@@ -347,7 +361,7 @@ export default function MenuScreen({ navigation }) {
   if (isLoading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={lightColors.primary} />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading delicious menu items...</Text>
         <Text style={styles.loadingSubtext}>Please wait (1.5s simulated delay)</Text>
       </View>
@@ -371,95 +385,6 @@ export default function MenuScreen({ navigation }) {
     );
   }
 
-  // =========================================================================
-  // RENDER ITEM CARD
-  // =========================================================================
-  const renderMenuItem = ({ item }) => {
-    const isImageBroken = failedImageIds[item.id];
-
-    return (
-      <View style={[styles.card, !item.isAvailable && styles.cardUnavailable]}>
-        <View style={styles.imageContainer}>
-          {!isImageBroken ? (
-            <Image
-              source={{ uri: item.image }}
-              style={styles.itemImage}
-              resizeMode="cover"
-              onError={() => handleImageError(item.id)}
-            />
-          ) : (
-            <View
-              style={[
-                styles.imageFallback,
-                { backgroundColor: getCategoryColor(item.category) },
-              ]}
-            >
-              <Text style={styles.fallbackEmoji}>{getCategoryEmoji(item.category)}</Text>
-              <Text style={styles.fallbackText}>{item.category}</Text>
-            </View>
-          )}
-
-          {item.isSpecial && (
-            <View style={styles.specialBadge}>
-              <Text style={styles.specialBadgeText}>Daily Special ⭐</Text>
-            </View>
-          )}
-
-          {!item.isAvailable && (
-            <View style={styles.unavailableBadge}>
-              <Text style={styles.unavailableBadgeText}>Out of Stock</Text>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.cardContent}>
-          <View style={styles.cardHeaderRow}>
-            <Text
-              style={[styles.itemName, !item.isAvailable && styles.textDisabled]}
-              numberOfLines={1}
-            >
-              {item.name}
-            </Text>
-            <Text style={[styles.itemPrice, !item.isAvailable && styles.textDisabled]}>
-              ${item.price.toFixed(2)}
-            </Text>
-          </View>
-
-          <Text
-            style={[styles.itemDescription, !item.isAvailable && styles.textDisabled]}
-            numberOfLines={2}
-          >
-            {item.description}
-          </Text>
-
-          <View style={styles.cardFooter}>
-            <View style={styles.categoryTag}>
-              <Text style={styles.categoryTagText}>{item.category}</Text>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.addButton, !item.isAvailable && styles.addButtonDisabled]}
-              disabled={!item.isAvailable}
-              onPress={() => {
-                Alert.alert('Item Added', `${item.name} added to your selection!`);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[
-                  styles.addButtonText,
-                  !item.isAvailable && styles.addButtonTextDisabled,
-                ]}
-              >
-                {item.isAvailable ? '+ Add to Cart' : 'Unavailable'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
   const showRecent =
     isSearchFocused && searchText.length === 0 && recentSearches.length > 0;
 
@@ -480,7 +405,7 @@ export default function MenuScreen({ navigation }) {
             ref={inputRef}
             style={styles.searchInput}
             placeholder="Search dishes..."
-            placeholderTextColor={lightColors.textMuted}
+            placeholderTextColor={colors.textMuted}
             value={searchText}
             onChangeText={handleSearchChange}
             onFocus={() => setIsSearchFocused(true)}
@@ -551,6 +476,27 @@ export default function MenuScreen({ navigation }) {
         </ScrollView>
       </View>
 
+      {/* Sort controls */}
+      <View style={styles.sortRow}>
+        <Text style={styles.sortLabel}>Sort:</Text>
+        {[
+          { key: 'priceLow', label: 'Price low-high' },
+          { key: 'priceHigh', label: 'Price high-low' },
+          { key: 'name', label: 'Name A-Z' },
+        ].map((option) => (
+          <TouchableOpacity
+            key={option.key}
+            style={[styles.sortButton, sortOrder === option.key && styles.sortButtonSelected]}
+            onPress={() => setSortOrder(option.key)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.sortButtonText, sortOrder === option.key && styles.sortButtonTextSelected]}>
+              {option.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {/* Menu list */}
       <FlatList
         ref={flatListRef}
@@ -565,8 +511,8 @@ export default function MenuScreen({ navigation }) {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={[lightColors.primary]}
-            tintColor={lightColors.primary}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
           />
         }
         ListEmptyComponent={
@@ -597,42 +543,43 @@ export default function MenuScreen({ navigation }) {
 /**
  * Helper to get a subtle background color for placeholder boxes based on category
  */
-function getCategoryColor(category) {
+function getCategoryColor(category, colors) {
   switch (category) {
     case 'Starters':
-      return '#E8F5E9';
+      return colors.success;
     case 'Mains':
-      return '#FFEBEE';
+      return colors.primaryLight;
     case 'Desserts':
-      return '#FFF3E0';
+      return colors.warning;
     case 'Drinks':
-      return '#E1F5FE';
+      return colors.borderLight;
     default:
-      return '#F5F5F5';
+      return colors.surface;
   }
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: lightColors.surface,
+    backgroundColor: colors.surface,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    backgroundColor: lightColors.background,
+    backgroundColor: colors.background,
   },
   loadingText: {
     fontSize: 16,
     fontWeight: '600',
-    color: lightColors.text,
+    color: colors.text,
     marginTop: 16,
   },
   loadingSubtext: {
     fontSize: 13,
-    color: lightColors.textMuted,
+    color: colors.textMuted,
     marginTop: 4,
   },
   errorIcon: {
@@ -642,32 +589,32 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: lightColors.error,
+    color: colors.error,
     marginBottom: 8,
     textAlign: 'center',
   },
   errorMessage: {
     fontSize: 14,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: 20,
     lineHeight: 20,
   },
   retryButton: {
-    backgroundColor: lightColors.primary,
+    backgroundColor: colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
   },
   retryButtonText: {
-    color: '#FFFFFF',
+    color: colors.badgeText,
     fontWeight: '700',
     fontSize: 15,
   },
 
   // ---- Q5 search styles ----
   searchWrapper: {
-    backgroundColor: lightColors.background,
+    backgroundColor: colors.background,
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 6,
@@ -675,9 +622,9 @@ const styles = StyleSheet.create({
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: lightColors.inputBackground,
+    backgroundColor: colors.inputBackground,
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
     borderRadius: 12,
     paddingHorizontal: 10,
     height: 44,
@@ -691,7 +638,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: lightColors.text,
+    color: colors.text,
     paddingVertical: 0,
   },
   clearButton: {
@@ -700,14 +647,14 @@ const styles = StyleSheet.create({
   },
   clearButtonText: {
     fontSize: 16,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     fontWeight: '700',
   },
   renderCounter: {
     alignSelf: 'flex-end',
     marginTop: 4,
     fontSize: 11,
-    color: lightColors.textMuted,
+    color: colors.textMuted,
   },
   recentWrapper: {
     marginTop: 4,
@@ -715,7 +662,7 @@ const styles = StyleSheet.create({
   recentLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     marginBottom: 6,
   },
   recentRow: {
@@ -727,13 +674,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
-    backgroundColor: lightColors.inputBackground,
+    backgroundColor: colors.inputBackground,
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
   },
   recentChipText: {
     fontSize: 13,
-    color: lightColors.text,
+    color: colors.text,
   },
   backToTopButton: {
     position: 'absolute',
@@ -741,7 +688,7 @@ const styles = StyleSheet.create({
 	paddingHorizontal: 16,
  	height: 44,
  	borderRadius: 22,
-    backgroundColor: lightColors.primary,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -751,16 +698,16 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   backToTopText: {
-    color: '#FFFFFF',
+    color: colors.badgeText,
     fontSize: 14,
     fontWeight: '700',
   },
 
   // ---- Q4 styles (unchanged) ----
   chipsWrapper: {
-    backgroundColor: lightColors.background,
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: lightColors.border,
+    borderBottomColor: colors.border,
     paddingVertical: 10,
   },
   chipsScrollContent: {
@@ -771,29 +718,62 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: lightColors.inputBackground,
+    backgroundColor: colors.inputBackground,
     borderWidth: 1,
-    borderColor: lightColors.border,
+    borderColor: colors.border,
   },
   chipSelected: {
-    backgroundColor: lightColors.primary,
-    borderColor: lightColors.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   chipText: {
     fontSize: 14,
     fontWeight: '600',
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
   },
   chipTextSelected: {
-    color: '#FFFFFF',
+    color: colors.badgeText,
     fontWeight: '700',
+  },
+  sortRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: colors.background,
+  },
+  sortLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sortButton: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    backgroundColor: colors.inputBackground,
+  },
+  sortButtonSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  sortButtonText: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  sortButtonTextSelected: {
+    color: colors.badgeText,
   },
   listContent: {
     padding: 16,
     paddingBottom: 28,
   },
   card: {
-    backgroundColor: lightColors.card,
+    backgroundColor: colors.card,
     borderRadius: 14,
     marginBottom: 16,
     overflow: 'hidden',
@@ -803,17 +783,17 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 3,
     borderWidth: 1,
-    borderColor: lightColors.borderLight,
+    borderColor: colors.borderLight,
   },
   cardUnavailable: {
     opacity: 0.55,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: colors.disabledBackground,
   },
   imageContainer: {
     width: '100%',
     height: 160,
     position: 'relative',
-    backgroundColor: '#EAEAEA',
+    backgroundColor: colors.borderLight,
   },
   itemImage: {
     width: '100%',
@@ -832,7 +812,7 @@ const styles = StyleSheet.create({
   fallbackText: {
     fontSize: 12,
     fontWeight: '600',
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
@@ -840,7 +820,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     left: 10,
-    backgroundColor: lightColors.accent,
+    backgroundColor: colors.accent,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
@@ -851,7 +831,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   specialBadgeText: {
-    color: '#FFFFFF',
+    color: colors.badgeText,
     fontWeight: '700',
     fontSize: 12,
   },
@@ -859,13 +839,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     right: 10,
-    backgroundColor: '#616161',
+    backgroundColor: colors.disabled,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
   },
   unavailableBadgeText: {
-    color: '#FFFFFF',
+    color: colors.badgeText,
     fontWeight: '700',
     fontSize: 11,
   },
@@ -878,26 +858,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 6,
   },
+  favoriteButton: {
+    paddingHorizontal: 8,
+  },
+  favoriteText: {
+    color: colors.textMuted,
+    fontSize: 22,
+  },
+  favoriteActive: {
+    color: colors.primary,
+  },
   itemName: {
     fontSize: 17,
     fontWeight: '700',
-    color: lightColors.text,
+    color: colors.text,
     flex: 1,
     marginRight: 8,
   },
   itemPrice: {
     fontSize: 17,
     fontWeight: '700',
-    color: lightColors.primary,
+    color: colors.primary,
   },
   itemDescription: {
     fontSize: 13,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     lineHeight: 18,
     marginBottom: 12,
   },
   textDisabled: {
-    color: lightColors.disabled,
+    color: colors.disabled,
   },
   cardFooter: {
     flexDirection: 'row',
@@ -905,7 +895,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   categoryTag: {
-    backgroundColor: lightColors.inputBackground,
+    backgroundColor: colors.inputBackground,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
@@ -913,25 +903,25 @@ const styles = StyleSheet.create({
   categoryTagText: {
     fontSize: 11,
     fontWeight: '600',
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     textTransform: 'uppercase',
   },
   addButton: {
-    backgroundColor: lightColors.primary,
+    backgroundColor: colors.primary,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
   },
   addButtonDisabled: {
-    backgroundColor: lightColors.disabled,
+    backgroundColor: colors.disabled,
   },
   addButtonText: {
-    color: '#FFFFFF',
+    color: colors.badgeText,
     fontWeight: '700',
     fontSize: 13,
   },
   addButtonTextDisabled: {
-    color: '#FFFFFF',
+    color: colors.badgeText,
   },
   emptyContainer: {
     padding: 40,
@@ -939,7 +929,8 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 15,
-    color: lightColors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
 });
+}
