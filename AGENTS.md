@@ -1,41 +1,30 @@
-This is an Expo/React Native mobile application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
+# Project rules for restaurant-app-mvp (university assignments A1 and A2)
 
-## Expo has changed — do not trust your training data
+The assignment texts are in `A1-FA2026.md` and `A2-FA2026.md` in this folder.
+Read the relevant Question section there before coding. The text is the specification.
 
-Expo ships breaking changes every SDK release. APIs you remember are likely renamed, moved, or removed. Before writing any code that touches an Expo, EAS, or React Native API:
+## Current state
+- A1 Questions 3, 4 and 5 were already built and work. Treat all existing code as working.
+- The app is Expo (SDK 57), JavaScript only. React Navigation is already installed.
 
-1. Read the major version of the `expo` package in `package.json`.
-2. Fetch the matching versioned docs: `https://docs.expo.dev/versions/v<major>.0.0/`
-3. For anything else, fetch https://docs.expo.dev/llms.txt — an index of all Expo docs with corrections to common LLM misconceptions. Follow its links to the specific page you need; never answer from memory.
+## Hard rules (never break these)
+1. Do ONE question per request. Never start the next question.
+2. Existing code works. Make the smallest possible edits to existing files.
+   - Never rewrite a whole existing file unless the task cannot be done otherwise. If you must, say so in the plan first.
+   - Keep existing names, structure, spacing, fonts and colour VALUES. Do not reformat or "clean up" code you were not asked to change.
+   - Never remove an existing feature (validation, debounce, pull to refresh, back to top, render counter, search suggestions, header title count, and so on).
+3. Write a short plan first (under 12 lines) and WAIT for my approval before changing any file.
+4. Do NOT run `npx expo start`, `npm run dev`, or any command that keeps running. I run those myself in another terminal.
+5. Do NOT run `git commit`, `git push`, `git reset`, `git clean`, `git checkout`, `git restore` or any `git stash` command. I do all git actions. There is an old stash in this repo: do not touch it.
+6. Never open, print, or change real secrets. Never write a real MongoDB connection string anywhere. `server/.env` is filled in by me.
+7. No new libraries except what the assignment needs. No Redux, Zustand, MobX or other state libraries. No TypeScript.
+   If a package must be installed and the install fails because of the sandbox or network, tell me the exact command and I will run it myself.
+8. Do not edit anything inside the `A1/` or `A2/` folders, except the Postman collection that goes into `A2/` when the task says so.
+9. Put a simple English comment on every React hook use and every custom hook, saying what it does and why it is used. I must explain this code in a viva.
 
-## Commands
-
-Use `bunx` instead of `npx` if the project uses bun (`bun.lock` present).
-
-```bash
-npx expo install <package>  # ALWAYS use instead of npm/yarn/pnpm/bun add — resolves SDK-compatible versions
-npx expo start              # start the dev server
-npx expo lint               # lint
-npx tsc --noEmit            # typecheck
-npx expo-doctor             # diagnose dependency and config issues
-npx expo install --fix      # fix incompatible package versions
-```
-
-Run lint and typecheck before declaring any task done.
-
-## Navigation & Routing
-
-- Use **Expo Router** for all navigation. Routes live in `src/app/` — every file there is a screen, `_layout.tsx` files define navigators. Keep non-route code (components, hooks, utils) outside `src/app/`.
-- Import `Link`, `router`, and `useLocalSearchParams` from `expo-router`.
-- Docs: https://docs.expo.dev/router/introduction.md
-
-## Building with EAS
-
-Use EAS to build, sign, and submit the app in the cloud (`eas build`, `eas submit`) and to ship over-the-air updates (`eas update`) — no local Xcode or Android Studio required. Run EAS CLI as `bunx eas-cli <command>` in Bun projects, or `npx eas-cli@latest <command>` otherwise; substitute that for bare `eas` in docs examples.
-Docs: https://docs.expo.dev/eas/index.md
-
-## Rules
-
-- If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.
-- Expo Go only includes its bundled native modules. After adding a library with native code, the app needs a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
-- Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
+## Final reply format (always)
+- Files created or changed (one line each)
+- Checklist: one line per requirement of the question, marked done or missing
+- Anything you were unsure about or assumed
+- Exact steps for me to test on my phone
+Keep it short. Do not repeat the code.
